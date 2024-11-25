@@ -33,7 +33,7 @@ Can plot the following types of data
     --dmsprofile (plot normalized reactivity data colored to slightly different scale)
     --N7profile  (plots normalized N7G reactivity data from profile file (profile.txtga))
     *Note* If multiple files are submitted for any of these profile flags - an average
-    reactivity and corresponding standard error will be calculated and plotted for each nucleotide.
+    reactivity and corresponding standard deviation will be calculated and plotted for each nucleotide.
 
 
 # StructureObjects
