@@ -1,0 +1,10 @@
+Version 1.0.1
+-----------
+- ReactivityProfiles.py eDMS_normalization() tweaked so g_pur and g_pyr are
+pooled in cases of low data point quantity. Additionally, g_pyr is scaled by a
+factor of 0.65.
+
+Version 1.0
+-----------
+- ReactivityProfiles.py eDMS_normalization() updated so g_pur and g_pyr
+normalization factors may be returned in case of N7 run.

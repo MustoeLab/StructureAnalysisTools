@@ -15,7 +15,7 @@
 import sys, os, math, argparse
 import pandas as pd
 import RNAStructureObjects as RNAtools
-
+import numpy as np
 import matplotlib 
 matplotlib.use('Agg')
 matplotlib.rcParams['xtick.major.size'] = 8
@@ -25,8 +25,6 @@ matplotlib.rcParams['xtick.minor.size'] = 4
 matplotlib.rcParams['xtick.minor.width'] = 1
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
-
-
 import matplotlib.pyplot as plot
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
@@ -34,8 +32,11 @@ from matplotlib.path import Path
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 from ReactivityProfile import ReactivityProfile
+from mean_reactivity_stdev import average_profile, calc_stdev
 
-import numpy as np
+#import warnings
+
+#warnings.filterwarnings("ignore")
 
 
 class ArcLegend(object):
@@ -77,16 +78,6 @@ class ArcLegend(object):
         width = 15
         if self.title is not None and len(self.title) > width:
             width = len(self.title)
-        
-        #xloc = xbound-width
-        #if xloc < 0:
-        #    xloc = 0
-        #if ybound < 0:
-        #    yloc = ybound+height+2
-        #    ax.add_patch(patches.Rectangle( (xloc-2, yloc-height+4), width, height, fc='white', lw=1.0))
-        #else:
-        #    yloc = ybound-height+2
-        #    ax.add_patch(patches.Rectangle( (xloc-2, yloc+4), width, height, fc='white', lw=1.0))
         
         xloc = xbound
         yloc = ybound
@@ -147,6 +138,9 @@ class ArcPlot(object):
 
         self.toplegend = None
         self.botlegend = None
+
+        self.upper_error = None
+        self.lower_error = None
         
         self.annotation = [] # list of annotation information
 
@@ -272,10 +266,10 @@ class ArcPlot(object):
 
 
 
-    def plotProfile(self, ax, bounds=None, colthresh = (-10, 0.4, 0.85, 3), heightscale=None, N7=False):
+    def plotProfile(self, ax, bounds=None, colthresh = (-10, 0.4, 0.85, 3), heightscale=None, N7=False, bar_height_scale = 1.0):
         """Add a reactivity profile to the axes (self.reactprofile needs to be set)
         
-        ax          = axes object to add plot. Expected to be top axis
+        ax          = axes object to add plot. Expected to be top axis unless N7.
         colthresh   = thresholds to bin reactivity data. 
                       First element indicates "No-data lower bound"
                       Last element indicates "Max reactivity" -- values are trucated above this
@@ -300,7 +294,38 @@ class ArcPlot(object):
             if self.reactprofileType == 'DMS': # adjust for compressed ploting range
                 heightscale *= 2
 
-        if not N7:
+        heightscale *= bar_height_scale
+
+        if N7: 
+            if self.reactprofileType == 'DMS': # Scale plot to better fit with DMS
+                heightscale *= 0.30303030303030304
+
+            spltSeq = list(self.seq)
+            for x,y in enumerate(self.N7profile):
+                if bounds is not None and x<bounds[0] or x>bounds[1]:
+                    continue
+
+                if y is None or y != y  or y<colthresh[0]:
+                    if spltSeq[x] in ['g', 'G']:
+                        if y != -3.3: # Visualize small values
+                            xvals[1].append(x+1)
+                            yvals[1].append(.2 * heightscale)
+                        else:
+                            xvals[0].append(x+1)
+                            yvals[0].append(-1)
+                elif y < colthresh[1]:
+                    xvals[1].append(x+1)
+                    yvals[1].append(y * heightscale)
+                elif y < colthresh[2]:
+                    xvals[2].append(x+1)
+                    yvals[2].append(y * heightscale)
+                else:
+                    xvals[3].append(x+1)
+                    if y > colthresh[3]:
+                        yvals[3].append(colthresh[3]*heightscale)
+                    else:
+                        yvals[3].append(y * heightscale)
+        else:
             for x,y in enumerate(self.reactprofile):
 
                 if bounds is not None and x<bounds[0] or x>bounds[1]:
@@ -323,31 +348,33 @@ class ArcPlot(object):
                         yvals[3].append(y*heightscale)
 
         
-        else: 
-            spltSeq = list(self.seq)
-            for x,y in enumerate(self.N7profile):
-                if bounds is not None and x<bounds[0] or x>bounds[1]:
-                    continue
+        if N7:
+        # If the values are N7 values, make them negative
+            yvals[0] = [elem * -1 for elem in yvals[0]] 
+            yvals[1] = [elem * -1 for elem in yvals[1]] 
+            yvals[2] = [elem * -1 for elem in yvals[2]] 
+            yvals[3] = [elem * -1 for elem in yvals[3]] 
+            ax.bar(xvals[0], -.1, alpha=0.7, linewidth=0, color=(179./255, 171./255, 148./255), align='center', clip_on=False)
+            ax.bar(xvals[1], yvals[1], alpha=0.7, linewidth=0, color='black', align='center', clip_on=False)
+            ax.bar(xvals[2], yvals[2], alpha=0.7, linewidth=0, color='hotpink', align='center', clip_on=False, width = 1.3)
+            ax.bar(xvals[3], yvals[3], alpha=0.7, linewidth=0, color='darkviolet', align='center', clip_on=False, width = 1.3)
+            colthresh = [elem * -1 for elem in colthresh]
 
-                if y is None or y != y or y<colthresh[0]:
-                    if spltSeq[x] in ['g', 'G']:
-                        xvals[0].append(x+1)
-                        yvals[0].append(-1)
-                elif y < colthresh[1]:
-                    xvals[1].append(x+1)
-                    yvals[1].append(y)
-                elif y < colthresh[2]:
-                    xvals[2].append(x+1)
-                    yvals[2].append(y)
-                else:
-                    xvals[3].append(x+1)
-                    if y > colthresh[3]:
-                        yvals[3].append(colthresh[3])
-                    else:
-                        yvals[3].append(y)
+            ax.axes.get_yaxis().set_visible(True)
+            ax.tick_params(axis='y', direction='out', labelsize=6, left=True, right=False)
+            ax.set_yticks( np.array(colthresh) * heightscale)
 
+            labels = [str(x) for x in colthresh]
+            labels[-1] = '>'+labels[-1]
+            ax.set_yticklabels( labels )
 
-        if not N7:
+            ax.set_frame_on(True)
+            for l in ('right','top','bottom'):
+                ax.spines[l].set_visible(False)
+               
+            ax.spines['left'].set_bounds(self.adjust, colthresh[3] * heightscale)
+
+        else:
             ax.bar(xvals[0], yvals[0], alpha=0.7, linewidth=0, color=(179./255, 171./255, 148./255),
                    align='center', clip_on=False, bottom=-0.3*heightscale)
         
@@ -373,34 +400,6 @@ class ArcPlot(object):
                
             ax.spines['left'].set_bounds(self.adjust, colthresh[3]*heightscale+self.adjust)
 
-        else:
-        # If the values are N7 values, make them negative
-            yvals[0] = [elem * -1 for elem in yvals[0]] 
-            yvals[1] = [elem * -1 for elem in yvals[1]] 
-            yvals[2] = [elem * -1 for elem in yvals[2]] 
-            yvals[3] = [elem * -1 for elem in yvals[3]] 
-            ax.bar(xvals[0], -.1, alpha=0.7, linewidth=0, color=(179./255, 171./255, 148./255), align='center', clip_on=False)
-            ax.bar(xvals[1], yvals[1], alpha=0.7, linewidth=0, color='black', align='center', clip_on=False)
-            ax.bar(xvals[2], yvals[2], alpha=0.7, linewidth=0, color='hotpink', align='center', clip_on=False)
-            ax.bar(xvals[3], yvals[3], alpha=0.7, linewidth=0, color='darkviolet', align='center', clip_on=    False)
-            colthresh = [elem * -1 for elem in colthresh]
-
-            ax.axes.get_yaxis().set_visible(True)
-            ax.tick_params(axis='y', direction='out', labelsize=6, left=True, right=False)
-            ax.set_yticks( np.array(colthresh))
-
-            labels = [str(x) for x in colthresh]
-            labels[-1] = '>'+labels[-1]
-            ax.set_yticklabels( labels )
-
-
-
-
-            ax.spines['left'].set_bounds(0, -1 * colthresh[3])
-
-
-            ax.set_frame_on(False)
-            ax.tick_params(axis='both', which='both', top=False, bottom=False, labelbottom=False)
 
 
 
@@ -433,7 +432,6 @@ class ArcPlot(object):
             colordict[group] = col
             
         ANNO['color'] = ANNO['group'].apply(lambda g: colordict[g])
-        #cycol = cycle('bgrcmk')
         
         anno_count = 2
         plot_ratio_used = 0.1
@@ -510,7 +508,7 @@ class ArcPlot(object):
 
 
     def writePlot(self, outPath="arcs.pdf", bounds=None, write=True,
-                  msg=None, msg_pos=(0,1), msg_kwargs={}, **args):
+                  msg=None, msg_pos=(0,1), msg_kwargs={}, bar_height_scale=1.0, **args):
         
         cutbounds = True
         if bounds is None:
@@ -533,9 +531,7 @@ class ArcPlot(object):
         if self.lower_N7_Plot == True and not doubleplot:
             axT = fig.add_subplot(211)
             axB = None
-            #axB = fig.add_subplot(212, sharex=axT)
             doubleplot = True
-            ##################
             self.addArcPath((1,2), panel=-1, alpha = 0)
 
     
@@ -569,7 +565,7 @@ class ArcPlot(object):
             axB.tick_params(axis='both', which='both', top=False, bottom=False, labelbottom=False)
             
             if self.botlegend:
-                self.botlegend.drawLegend(axB, bounds[0], -self.height[0]*.5) 
+                self.botlegend.drawLegend(axB, bounds[0], -self.height[1]*.5) 
 
 
 
@@ -606,8 +602,10 @@ class ArcPlot(object):
 
         for i, label in enumerate(minlabels):
             label.set_size(7)
-            if i % tickinterval == beginint:
-                label.set_visible(False)
+            # Below fix likely only necessary when running in py2 removes duplicate ticks
+            if sys.version_info[0] < 3:
+                if i % tickinterval == beginint: 
+                    label.set_visible(False)
 
 
         # plot gridlines
@@ -658,23 +656,18 @@ class ArcPlot(object):
             axB.text(annotation[1], annotation[2], annotation[0], \
                      color = annotation[3], fontsize = annotation[4], \
                      horizontalalignment='center', verticalalignment='bottom')                
-                
-
-        #if self.intdistance is not None:
-        #    xvals = np.arange(bounds[0]+1, bounds[1]+1)
-        #    yvals = self.intdistance[bounds[0]:bounds[1]+1]
-        #    if np.mean(yvals) > 0:
-        #        axT.plot( xvals, yvals, color="black", lw=2)
-        #    else:
-        #        axB.plot( xvals, yvals, color="black", lw=2)
-
 
         if self.reactprofile is not None:
-            self.plotProfile(axT, bounds, **args)
+            self.plotProfile(axT, bounds, bar_height_scale = bar_height_scale, **args)
     
         if self.lower_N7_Plot == True:
-            self.plotProfile(axB, bounds, colthresh = (0, 2, 5, 10), N7=True, **args)
+            self.plotProfile(axB, bounds, colthresh = (0, 1.6, 2.3, 3.3), N7=True, **args)
 
+        # Plot st dev for NT averages across multiple profiles
+        if self.upper_error is not None:
+            self.plot_error_bars(axT, self.upper_error, self.reactprofile, bar_height_scale = bar_height_scale)
+        if self.lower_error is not None:
+            self.plot_error_bars(axB, self.lower_error, self.N7profile, N7=True)
         
         if msg is not None:
             axT.text(msg_pos[0], msg_pos[1], msg, transform=axT.transAxes, **msg_kwargs)
@@ -727,10 +720,11 @@ class ArcPlot(object):
 
 
     
-    def addRings(self, ringfile, metric='z', panel=1, bins=None, contactfilter=(None,None),
-                 filterneg=False):
+    def addRings(self, ringfile, N7=False, N17=False, metric='alpha', panel=1, bins=None, contactfilter=(None,None),
+                 filterneg=False, skip_legend=False):
         """Add arcs from ringmapper file
-        metric  = z or sig
+        metric  = z, sig or alpha
+        default: alpha
         """
         
         if contactfilter[0]:
@@ -739,32 +733,44 @@ class ArcPlot(object):
         if filterneg:
             print("Filtering out negative correlations")
 
-        
         colors = [(44,123,182), (44,123,182), (171,217,233), (255,255,255), (253,174,97), (215,25,28), (215,25,28)]
-        #colors = [(176,70,147), (176,70,147), (229,203,228), (255,255,255), (253,174,97), (215,25,28), (215,25,28)]
 
 
+        if N7 or N17:
+            colors = [(91, 218, 190), (91, 218, 190), (0, 95, 154), (255, 255, 255), (218, 91, 172), (83, 48, 95), (83, 48, 95)]
+
+        if metric == "alpha":
+            colors = colors[3:]
 
         colors = [tuple([y/255.0 for y in x]) for x in colors]
         
-        alpha = [1.0, 1.0, 0.0, 0.0, 1.0, 1.0]
-        gradiant = [False, True, False, False, True, False]
+        if metric == "alpha":
+            alpha = [0.0, 1.0, 1.0]
+            gradiant = [False, True, False]
+
+        else:
+            alpha = [1.0, 1.0, 0.0, 0.0, 1.0, 1.0]
+            gradiant = [False, True, False, False, True, False]
         
         if metric=='z':
             if bins is None:
                 bins = [-50, -5, -1, 0, 1, 5, 50]
             else:
                 bins = [-1e10, -bins[1], -bins[0], 0, bins[0], bins[1], 1e10]
+        elif metric=='alpha':
+            if bins is None:
+                bins = [0, 2, 5, 1e10]
+            else:
+                bins = [0, bins[0], bins[1], 1e10]
+
         else:
             if bins is None:
                 bins = [-1e10, -100, -20, 0, 20, 100, 1e10]
             else:
                 bins = [-1e-10, -bins[1], -bins[0], 0, bins[0], bins[1], 1e10]
 
-
-
         allcorrs = []
-        
+         
         with open(ringfile) as inp:
             header = inp.readline().split()
             window = int(header[1].split('=')[1])
@@ -772,8 +778,11 @@ class ArcPlot(object):
             inp.readline()
                 
             # define molecule length if not set from something else
-            if self.seq == '':
+            try:
+                len(self.seq)/len(self.seq)
+            except:
                 self.seq = ' '*int(header[0])
+                print("self.seq: ", self.seq)
  
 
             for line in inp:
@@ -787,23 +796,33 @@ class ArcPlot(object):
                 if filterneg and int(spl[3])<0:
                     continue
 
+                if metric == 'alpha' and float(spl[2]) < 20:
+                    continue
+
+                if self.seq[i - 1] not in ['A','G','C','U','T'] or self.seq[j - 1] not in ['A','G','C','U','T']:
+                    continue
+
+
                 if metric == 'z':
                     val = float(spl[4])
+                elif metric =='alpha':
+                    val = float(spl[9])
                 else:
                     val = float(spl[2])
 
-                if val > bins[3]:
+                if val > bins[0] and metric == "alpha":
                     allcorrs.append( ( int(spl[0]), int(spl[1]), float(spl[3])*val ) )
 
+                elif val > bins[3]:
+                    allcorrs.append( ( int(spl[0]), int(spl[1]), float(spl[3])*val ) )
+        
 
         if len(allcorrs)==0:
             print('WARNING: No RINGs passing filter in {}'.format(ringfile))
 
-
         for i in range(len(bins)-1):
             
             corrs = [c for c in allcorrs if bins[i]<c[2]<=bins[i+1]]
-            
             corrs.sort(key=lambda x:x[2]) 
            
             for c in corrs:
@@ -814,28 +833,34 @@ class ArcPlot(object):
                 
                 self.addArcPath( c[:2], panel=panel, color=col, alpha=alpha[i], window=window)
 
-        
         # Add the legend
         t = 'RING {0} win={1} {2}'.format(mname, window, metric.upper())
-        if filterneg:
-            c = (colors[4], colors[5])
-            l = ('>{}'.format(bins[4]), '>={}'.format(bins[5]))
+
+        if metric == "alpha":
+            c = (colors[1], colors[2])
+            l = ('>{}'.format(bins[1]), '>{}'.format(bins[2]))
+
         else:
-            c = (colors[1], colors[2], colors[4], colors[5])
-            l = ('<={}'.format(bins[1]), '<{}'.format(bins[2]), 
-                 '>{}'.format(bins[4]), '>={}'.format(bins[5]))
+            if filterneg:
+                c = (colors[4], colors[5])
+                l = ('>{}'.format(bins[4]), '>{}'.format(bins[5]))
+            else:
+                c = (colors[1], colors[2], colors[4], colors[5])
+                l = ('<{}'.format(bins[1]), '<{}'.format(bins[2]), 
+                     '>{}'.format(bins[4]), '>{}'.format(bins[5]))
         
 
-        if panel>0:
-            if self.toplegend is not None:
-                self.toplegend.append(t, c, l)
+        if not skip_legend:
+            if panel>0:
+                if self.toplegend is not None:
+                    self.toplegend.append(t, c, l)
+                else:
+                    self.toplegend = ArcLegend(title=t, colors=c, labels=l)
             else:
-                self.toplegend = ArcLegend(title=t, colors=c, labels=l)
-        else:
-            if self.botlegend is not None:
-                self.botlegend.append(t, c, l)
-            else:
-                self.botlegend = ArcLegend(title=t, colors=c, labels=l)
+                if self.botlegend is not None:
+                    self.botlegend.append(t, c, l)
+                else:
+                    self.botlegend = ArcLegend(title=t, colors=c, labels=l)
 
 
 
@@ -846,7 +871,7 @@ class ArcPlot(object):
         if self.seq == '':
             self.seq = ' '*dpObj.length
         elif len(self.seq) != dpObj.length:
-            print("Warning:: dp file sequence length = {0}; CT/FASTA length = {1}".format(dpObj.length, len(self.seq)))
+            print("Warning: dp file sequence length = {0}; CT/FASTA length = {1}".format(dpObj.length, len(self.seq)))
 
 
         refcolors = [ (150,150,150), (255,204,0),  (72,143,205) ,(81, 184, 72) ]
@@ -856,7 +881,6 @@ class ArcPlot(object):
 
 
         if bins is None:
-            #bins = [0.01, 0.1, 0.5, 0.9, 1.0]
             bins = [0.03, 0.1, 0.3, 0.8, 1.0]
             colors = refcolors
             alpha = refalpha
@@ -1115,95 +1139,199 @@ class ArcPlot(object):
 
 
     def readProfile(self, profilefile, dms=False):
-        
-        with open(profilefile) as inp:
-            line = inp.readline().split()
-            if len(line) == 2 or len(line)==4:
-                ftype=1
-            else:
-                ftype=2
-        
 
-        if ftype==1:
-            self.readSHAPE(profilefile)
+        if isinstance(profilefile, ReactivityProfile):
+            self.reactprofile = profilefile.normprofile
+            if not isinstance(self.seq, np.ndarray) and (self.seq == '' or self.seq.count(' ') == len(self.seq)):
+                self.seq = profilefile.sequence
+
         else:
-            profile = ReactivityProfile(profilefile)
-            self.reactprofile = profile.normprofile
+            with open(profilefile) as inp:
+                line = inp.readline().split()
+                if len(line) == 2 or len(line)==4:
+                    ftype=1
+                else:
+                    ftype=2
+            
 
-            if self.seq == '' or self.seq.count(' ') == len(self.seq):
-                self.seq = profile.sequence
-        
+            if ftype==1:
+                self.readSHAPE(profilefile)
+            else:
+                profile = ReactivityProfile(profilefile)
+                self.reactprofile = profile.normprofile
+                
+                if self.seq == '' or self.seq.count(' ') == len(self.seq):
+                    self.seq = profile.sequence
 
         if dms:
             self.reactprofileType = 'DMS'
         
         # need to give the plot some height if no other things added
         if max(self.height)==0:
-            self.height[1] = max(5, min(10, len(self.reactprofile)/50.))
-
-
-        
-    def old_addInteractionDistance(self, readMatFile, thresh, panel=1):
-        
-        height = []
-        readMat = np.loadtxt(readMatFile)
-
-        for i in range(len(self.seq)):
-            
-            for j in range(i,len(self.seq)):
-                if readMat[i][j] < thresh:
-                    break
-            n = float(j-i)
-
-            for j in range(i, -1, -1):
-                if readMat[i][j] < thresh:
-                    break
-            m = float(i-j)
-
-            try:
-                z = n*math.sin(math.atan(m/n))
-            except:
-                z = 0
-
-            height.append(panel*(z+self.adjust))
-
-        self.intdistance = height
-
-
-
-    def addInteractionDistance(self, readMatFile, thresh, panel=1):
-        
-        readmat = np.loadtxt(readMatFile)
-        
-        yvals = np.zeros(len(self.seq))
-
-        for i in range(len(self.seq)):
-
-            for j in range(i, len(self.seq)):
-                if readmat[i,j] >=thresh:
-
-                    idx = int(round((j-i+1)/2.0))
-                    
-                    if idx > yvals[i+idx]:
-                        yvals[i+idx] = idx
-        
-        self.intdistance = panel*yvals
+            #self.height[1] = max(5, min(10, len(self.reactprofile)/50.))
+            self.height[1] = max(20, min(40, len(self.reactprofile)/12.5))
 
 
     def readN7Profile(self, N7File, panel=-1):
-        profile = ReactivityProfile(N7File)
-        react = profile.normprofile
 
+        if isinstance(N7File, ReactivityProfile):
+            profile = N7File   
+        else:
+            profile = ReactivityProfile(N7File)
+
+        react = profile.normprofile
 
         for ite in range(len(react)):
             if (np.isnan(react[ite])):
-                react[ite] = -10
+                react[ite] = -3.3
         
 
         if (panel == -1):
             self.lower_N7_Plot=True
 
         self.N7profile = react
+
+    def splitCatRing(self, ringFile):
+        """Splits up concatenated ring file into three arrays by type of ring (N1/3, N7, N1/3-7)"""
+        oFile = open(ringFile, "r")
+        allLines = [line for line in oFile]
+        oFile.close()
+
+        #Removes header
+        arcLines = allLines[2:]
+
+        #Appends header to start of growing line lists
+        N13Lines = allLines[0:2]
+        N7Lines = allLines[0:2]
+        N17Lines = allLines[0:2]
+        
+
+        #Calculates midpoint given this is a concatenated file
+        midpt = len(self.seq)
+        
+
+        #Iterates through and sort lines by type
+        for index in range(len(arcLines)):
+            splLine = arcLines[index].split()
+
+            i = int(splLine[0])
+            j = int(splLine[1])
+
+            if ((i > midpt and j <= midpt ) or (i <= midpt and j > midpt)):
+                splLine[1] = str(int(splLine[1]) - midpt )
+
+                if int(splLine[0]) > int(splLine[1]):
+                    splLine[0], splLine[1] = splLine[1], splLine[0]
+
+                adjustLine = "\t".join(splLine) + "\n"
+                N17Lines.append(adjustLine)
+            
+
+            elif (i > midpt and j > midpt):
+                splLine[0] = str(int(splLine[0]) - midpt )
+                splLine[1] = str(int(splLine[1]) - midpt )
+                adjustLine = "\t".join(splLine) + "\n"
+                N7Lines.append(adjustLine)
+
+            elif (i <= midpt and j <= midpt):
+                N13Lines.append(arcLines[index])
+
+        return N13Lines, N7Lines, N17Lines
+
+
+    def addCatRings(self, ringfile, N7=False, N17=False, metric='alpha', panel=1, bins=None, contactfilter=(None,None),filterneg=False):
+        """Writes concatenated ring files to plot. Splits files into N13 on top and N7 / N17 below"""
+
+        
+        #Sanity Checking
+        if(not list(self.seq)):
+            print("Error: No sequence specified. Must add profile or fasta before adding concatenated ring file.")
+        else:
+            
+            #Splits file into an array of lines based on type
+            N13Arr, N7Arr, N17Arr = self.splitCatRing(ringfile)
+            
+            
+
+            #Produces temp files
+            N13File = open(".N13_file_temp_ring.txt", "w")
+            for line in N13Arr:
+                N13File.write(line)
+            N13File.close()
+
+            N7File = open(".N7_file_temp_ring.txt", "w")
+            for line in N7Arr:
+                N7File.write(line)
+            N7File.close()
+
+            N17File = open(".N17_file_temp_ring.txt", "w")
+            for line in N17Arr:
+                N17File.write(line)
+            N17File.close()
+
+
+            #Write to plot
+            self.addRings(".N13_file_temp_ring.txt", N7=False, N17=False, metric=metric, panel=1, bins=bins, contactfilter=contactfilter, filterneg=filterneg)
+
+            if N7:
+                self.addRings(".N7_file_temp_ring.txt", N7=N7, metric=metric, panel=-1, bins=bins, contactfilter=contactfilter, filterneg=filterneg)
+
+            if N17:
+                if N7:
+                    self.addRings(".N17_file_temp_ring.txt", N17=N17, metric=metric, panel=-1, bins=bins, contactfilter=contactfilter, filterneg=filterneg, skip_legend=True)
+                else:
+                    self.addRings(".N17_file_temp_ring.txt", N17=N17, metric=metric, panel=-1, bins=bins, contactfilter=contactfilter, filterneg=filterneg)
+
+            #Removes temp files
+            os.remove(".N17_file_temp_ring.txt")
+            os.remove(".N7_file_temp_ring.txt")
+            os.remove(".N13_file_temp_ring.txt")
+
+    # Record std dev in error bar attribute for average profile arcplot runs
+    def add_error_bars(self, nt_stdev, lower = False):
+        if lower:
+            self.lower_error = nt_stdev
+        else:
+            self.upper_error = nt_stdev
+
+    def plot_error_bars(self, ax, error_size, error_bar_y, heightscale = None, N7 = False, bar_height_scale = 1.0):
+        """Add error bars to corresponding subplot (top or bottom).
+           Currently only used to plot standard deviation for NT
+           locations informed by multiple profiles."""
+
+        # plotProfile does not plot full bar if greater than the max colorThresh. Only plots up to max of colorThresh.
+        # Need to account for this so error bars plotted at proper location in graph
+        if N7:
+            cutoff = 3.3
+        elif self.reactprofileType == 'DMS':
+            cutoff = 1
+        else:
+            cutoff = 3
+
+        error_bar_y[error_bar_y > cutoff] = cutoff
+
+
+        # Transform error_bar_y locations as well as error bar scaling depending on type
+        # of profile that is being annotated.
+        if N7:
+            error_bar_y *= -1
+        if heightscale is None:
+            heightscale = max(4, min(10, len(self.reactprofile)/50.))
+            heightscale = min(max(self.height)/4., heightscale)
+            if self.reactprofileType == 'DMS':
+                heightscale *= 2
+                if N7:
+                    heightscale *= 0.30303030303030304
+
+
+        heightscale *= bar_height_scale
+        error_bar_y *= heightscale
+        if not N7:
+            error_bar_y += self.adjust
+        error_size *= heightscale
+
+        ax.errorbar(range(1, len(error_size) + 1), error_bar_y, xerr = [0] * len(error_size), yerr = error_size, linestyle='none', linewidth=0.5, ecolor = 'black')
+
 
 class ANNO():
     """ANNO object to process functional annotations"""
@@ -1306,7 +1434,6 @@ class ANNO():
 
         if len(df) == 0:
             print('No rows intersect with {} in the reference file(s). Exiting'.format(self.name))
-            #print(f'No rows intersect with {self.name} in the reference file(s). Exiting')
             exit()
             
         # apply score filter
@@ -1324,13 +1451,10 @@ class ANNO():
             df['tend'] = newend
 
         df.reset_index(drop=True, inplace = True)
-        #df.to_csv(f'{self.name}_map.csv', sep = '\t', index = False)
         df.to_csv('{}_map.csv'.format(self.name), sep = '\t', index = False)
 
         count = len(df)
-        #print(f'{count} features in reference files(s) mapped to provided coordinates. See output file {self.name}_map.csv')
         print('{} features in reference files(s) mapped to provided coordinates. See output file {}_map.csv'.format(count, self.name))
-        #print(self.df)
 
         def split_info(info):
             spl = info.split('_')
@@ -1373,11 +1497,10 @@ class ANNO():
 
         self.df = pd.concat([self.df, df])
 
+
+
+
         # end of ANNO object
-
-
-    
-
 
 #############################################################################
 
@@ -1387,15 +1510,19 @@ class ANNO():
 def parseArgs():
 
     prs = argparse.ArgumentParser()
-    prs.add_argument("outputPDF",type=str, help="Name of the output PDF graphic")
+    prs.add_argument("--outputPDF",type=str, help="Name of the output PDF graphic", required = True)
     prs.add_argument("--ct", type=str, help="Base CT file to plot. By default, the first (0th) structure is plotted. Alternative structures can be selected by passing ,# after the CT file name (e.g. --ct ctfile.ct,3)")
     prs.add_argument("--fasta", type=str, help="Fasta sequence file")
     prs.add_argument("--refct", type=str, help="Reference CT to compare base ct against. By default the first (0th) structure is plotted. Alternative structures can be selected by passing ,# after the CT file name (e.g. --refct ctfile.ct,3)")
     prs.add_argument("--probability", type=str, help="Pairing probability file in dotplot format. By default, arcs are drawn for the following probability intervals: [0.03,0.1], [0.1,0.3], [0.3,0.8], [0.8,1.0]. These intervals can be modified by passing thresholds as comma-separated values. For example, --prob file.dp,0.03,0.1,0.3,0.8,1.0 specifies the default intervals. At most 4 intervals can be plotted, but fewer intervals are allowed (e.g. --prob file.dp,0.1,0.3,0.8,1.0 will plot 3 intervals).")
+
+    prs.add_argument("--ringalpha", type=str, help="Plot alpha-scores from ringmapper correlation file. Default color thresholds are [2,5]. Can be modified by passing thresholds as comma-separated values (e.g. --corralpha corrs.txt,2,5)")
     
-    prs.add_argument("--ringz", type=str, help="Plot Z-scores from ringmapper correlation file. Default color thresholds are Z=1 and Z=5. Can be modified by passing thresholds as comma-separated values (e.g. --corrz corrs.txt,1,5)")
+    prs.add_argument("--ringz", type=str, help="Plot Z-scores from ringmapper correlation file. Default color thresholds are [1,5]. Can be modified by passing thresholds as comma-separated values (e.g. --corrz corrs.txt,1,5)")
     
-    prs.add_argument("--ringsig", type=str, help="Plot statistical significance from ringmapper file. Default color thresholds are [20,500]. Can be modified by passing thresholds as comma-separated values (e.g. --corrsig corrs.txt,20,500)")
+    prs.add_argument("--ringsig", type=str, help="Plot statistical significance from ringmapper file. Default color thresholds are [20,100]. Can be modified by passing thresholds as comma-separated values (e.g. --corrsig corrs.txt,20,500)")
+
+    prs.add_argument("--catring",type=str, help='Plot N13, N7, and N137 rings from an input concatenated ring file.')
 
     prs.add_argument("--pairmap", type=str, help="Plot pairmap signals from pairmap file. By default plot principal & minor correlations. Can plot all complementary correlations by passing ,all (e.g. --pairmap pairmap.txt,all)")
 
@@ -1403,16 +1530,16 @@ def parseArgs():
 
 
     prs.add_argument("--ntshape", type=str, help="Color nucs by shape reactivty in provided shape/map file")  
-    prs.add_argument("--profile", type=str, help="Plot reactivity profile on top from shape/map file")
-    
-    prs.add_argument("--dmsprofile",type=str, help='Normalize and plot DMS reactivity from profile file')
+
+    prs.add_argument("--profile", type=str, nargs = "+", help="Plot reactivity profile on top from shape/map file. If more than one profile is submitted via this flag, will plot mean normalized reactivity as well as stdev per nucleotide. ")
+    prs.add_argument("--dmsprofile", type=str, nargs = "+", help='Normalize and plot DMS reactivity from profile file. If more than one profile is submitted via this flag, will plot mean normalized reactivity as well as stdev per nucleotide.')
+    prs.add_argument("--N7profile",type=str, nargs = "+", help='Plots N7 reactivity from profile file. Note, you must specify a profile file with --profile or --dmsprofile in order for this command to work. If more than one profile is submitted via this flag, will plot mean normalized reactivity as well as stdev per nucleotide.')
+    prs.add_argument("--bar_height", type=float, default=1.0, help="Scales N13 profile bar heights to a float in the range 0.0 < bar_height <= 1.00 so height *= bar_height. (eg if bar_height = .66 then the height will be scaled to 66 percent of the default value.) ")
 
     prs.add_argument("--bottom", action='store_true', help="Plot arcs on the bottom")
 
     prs.add_argument("--title", type=str, default='', help='Figure title')
     prs.add_argument("--showGrid", action="store_true", help="plot a grid on axis ticks")
-    #prs.add_argument("--intDistance", type=str, help="Pass depth file for computing likely max interaction distance")
-    #prs.add_argument("--depthThresh", type=int,default=10000, help="Interaction depth threshold (Default=10,000)")
     prs.add_argument("--bound", type=str, help="comma separated bounds of region to plot (e.g. --bound 511,796)")
 
     prs.add_argument("--filternc", action="store_true", help="filter out non-canonical pairs in ct")
@@ -1438,7 +1565,7 @@ def parseArgs():
     prs.add_argument("--annocols", type=str, help='Define a color to plot annotation. If plotting two or more groups, \
                                                 provide a list of colors separated by comma (e.g. darkblue,darkgreen)')
 
-    prs.add_argument("--N7profile",type=str, help='Plots N7 reactivity from profile file')
+
 
     args = prs.parse_args()
  
@@ -1463,7 +1590,11 @@ def parseArgs():
         except:
             raise TypeError('Incorrectly formatted --probability argument {}'.format(args.probability))
     
-    
+
+    # Make sure bar_height argument is valid
+    if not 0.0 < args.bar_height <= 1.0:
+        raise ValueError(" --bar_height argument must fall in range 0.0 < bar_height <= 1.0 ")
+        
 
     def subparse3(arg, name):
         
@@ -1491,6 +1622,9 @@ def parseArgs():
         numplots += 1
         args.ringsig, args.ringsig_bins = subparse3(args.ringsig, '--ringsig')
 
+    if args.ringalpha:
+        numplots += 1
+        args.ringalpha, args.ringalpha_bins = subparse3(args.ringalpha, '--ringalpha')
 
     args.pairmap_all = False
     if args.pairmap:
@@ -1619,7 +1753,11 @@ if __name__=="__main__":
                        contactfilter=(args.contactfilter, CT1), filterneg=args.filternegcorrs)
         panel *= -1
 
-    
+    if args.ringalpha:
+        aplot.addRings(args.ringalpha, panel=panel, metric='alpha', bins=args.ringalpha_bins,
+                       contactfilter=(args.contactfilter, CT1), filterneg=args.filternegcorrs)
+        panel *= -1
+
     if args.compare_pairmap:
         
         from pairmap_analysis import PairMap
@@ -1629,32 +1767,39 @@ if __name__=="__main__":
 
     if args.annodir or args.annotations:
         aplot.addANNO(anno.df, length = anno.length, panel = -1, colors = args.annocols)
-
-    #if arg.intDistance:
-    #    aplot.addInteractionDistance(arg.intDistance, arg.depthThresh, panel)
-            
-
     if args.ntshape:
         aplot.colorSeqByMAP(args.ntshape)
-
     if args.profile:  
-        aplot.readProfile(args.profile)
-    
-    if args.dmsprofile:
-        aplot.readProfile(args.dmsprofile, dms=True)
-
+        if len(args.profile) > 1:
+            avg_profile = average_profile(args.profile)
+            nt_stdev = calc_stdev(args.profile)
+            aplot.readProfile(avg_profile)
+            aplot.add_error_bars(nt_stdev) 
+        elif len(args.profile) == 1:
+            aplot.readProfile(args.profile[0])
     if args.N7profile:
-        aplot.readN7Profile(args.N7profile)
+        if len(args.N7profile) > 1:
+            avg_profile = average_profile(args.N7profile)
+            nt_stdev = calc_stdev(args.N7profile)
+            aplot.readN7Profile(avg_profile)
+            aplot.add_error_bars(nt_stdev, lower = True) 
+        elif len(args.N7profile) == 1:
+            aplot.readN7Profile(args.N7profile[0])
+    if args.dmsprofile:
+        if len(args.dmsprofile) > 1:
+            avg_profile = average_profile(args.dmsprofile)
+            nt_stdev = calc_stdev(args.dmsprofile)
+            aplot.readProfile(avg_profile, dms = True)
+            #print("Finding std dev: ", nt_stdev)
+            aplot.add_error_bars(nt_stdev) 
+        elif len(args.dmsprofile) == 1:
+            aplot.readProfile(args.dmsprofile[0], dms=True)
 
+    if args.catring:
+        aplot.addCatRings(args.catring, filterneg=args.filternegcorrs, metric='alpha', N7=True, N17=True, contactfilter=(args.contactfilter, CT1))
     if args.showGrid:
         aplot.grid = True
 
-    aplot.writePlot( args.outputPDF, bounds = args.bound, msg=msg)
-
-
-
-
-
-
+    aplot.writePlot( args.outputPDF, bounds = args.bound, msg=msg, bar_height_scale = args.bar_height) 
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4

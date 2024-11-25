@@ -26,7 +26,7 @@ ntorder = ('A','C','G','U')
 class ReactivityProfile(object):
     """ Object containing reactivity profile data
     Can contain:
-        seqeunce    = nt sequence
+        sequence    = nt sequence
         nts         = nt numbering
         rawprofile  = rxn rate 
         rawerror    = estimated error of rxn rate
@@ -167,7 +167,7 @@ class ReactivityProfile(object):
 
         elif ext == 'csv':
             # test whether it is a normal or pivoted file
-            with open(filename,'rU') as f:
+            with open(filename,'r') as f:
                 spl = f.readline().split(',')[2]
             
             if spl=='number':
@@ -196,6 +196,7 @@ class ReactivityProfile(object):
 
     def readProfileFile(self, filepath, bg=0.02, depthcut=100, ignorents =[], **kwargs):
         """read in Profile file output by new shapemapper"""
+
         
         seq = []
         num = []
@@ -206,7 +207,7 @@ class ReactivityProfile(object):
         shape = []
         shapeerr = []
         
-        with open(filepath, 'rU') as f:
+        with open(filepath, 'r') as f:
             
             header = f.readline().split()
             header = [x.lower() for x in header]
@@ -290,7 +291,7 @@ class ReactivityProfile(object):
     def readMutationCSV(self, filepath, exclude = [], **kwargs):
         """read in a mutation count"""
         
-        with open(filepath,'rU') as f:
+        with open(filepath,'r') as f:
             
             for line in f:
                 line = line.strip(', \n')
@@ -338,7 +339,7 @@ class ReactivityProfile(object):
     def readMutationCSVpivot(self, filepath, exclude=[], **kwargs):
         """read in a pivoted mutation count file"""
         
-        f = open(filepath,'rU')
+        f = open(filepath,'r')
         # pop off the first two lines
         for i in range(2):
             f.readline()
@@ -429,7 +430,7 @@ class ReactivityProfile(object):
     def readTabFile(self, filepath, bg=0.02, **kwargs):
         """read in tab file"""
 
-        with open(filepath, 'rU') as f:
+        with open(filepath, 'r') as f:
     
             header = f.readline().split('\t')
             header = [x.strip() for x in header] 
@@ -481,7 +482,7 @@ class ReactivityProfile(object):
                               
 
 
-    def normalize(self, eDMS=False, oldDMS=False, byNT=False, name=None, normfactors = None, errfactors = None, **kwargs):
+    def normalize(self, eDMS=False, oldDMS=False, byNT=False, name=None, normfactors = None, errfactors = None, N7 = False, **kwargs):
         """normalize the profile; overwrites values in normprofile
         By default, normalization is done in a sequence agnostic way (SHAPE default)
         If byNT, nts are normalized independently
@@ -492,6 +493,8 @@ class ReactivityProfile(object):
         """
 
 
+
+        #print("Running here")
 
         if name is None and self.subprofile is not None:
             name = 'sub'
@@ -527,9 +530,21 @@ class ReactivityProfile(object):
 
             elif eDMS:
                 for i in ntorder:
-                    nfac, nerr = self.eDMS_normalization(self.reactivityByNt(nts=i, name=name))
-                    normfactors[i] = nfac
-                    errfactors[i] = nerr
+                    if i == 'G' and N7:
+                        nfac, g_pur_pyr_dict, nerr = self.eDMS_normalization(self.reactivityByNt(nts="N", name=name), NT="N", N7=N7, name=name)
+                        if not (g_pur_pyr_dict != g_pur_pyr_dict):
+                           normfactors.update(g_pur_pyr_dict)
+                    else:
+                        nfac, nerr = self.eDMS_normalization(self.reactivityByNt(nts=i, name=name), NT=i, N7=N7)
+
+
+                    if i == 'G' and N7:
+                       normfactors['N'] = nfac
+                       errfactors[i] = nerr
+
+                    else:
+                       normfactors[i] = nfac
+                       errfactors[i] = nerr
 
 
             elif oldDMS:
@@ -554,29 +569,34 @@ class ReactivityProfile(object):
  
 
         # normalize the data
-        for i in ntorder:
-            mask = (self.sequence == i)
-            normprof[mask] /= normfactors[i]
 
-        self.normprofile = normprof
-        
-        if eDMS:
-            print("Renormalized data using eDMS mode")
-        elif oldDMS:
-            print("Renormalized data using oldDMS mode")
-        elif byNT:
-            print("Renormalized data using byNT mode")
+        if N7:
+            pass    
         else:
-            print("Renormalized data using standard mode")
+           for i in ntorder:
+               mask = (self.sequence == i)
+               normprof[mask] /= normfactors[i]
+
+           self.normprofile = normprof
+           
+           if eDMS:
+               print("Renormalized data using eDMS mode")
+           elif oldDMS:
+               print("Renormalized data using oldDMS mode")
+           elif byNT:
+               print("Renormalized data using byNT mode")
+           else:
+               print("Renormalized data using standard mode")
 
 
-        if normerr is not None and errfactors is not None:
-            for i in ntorder:
-                mask = (self.sequence == i)
-                normerr[mask] += (errfactors[i]/normfactors[i])**2
-                normerr[mask] = np.abs( normprof[mask] ) * np.sqrt( normerr[mask] )
-            
-            self.normerror = normerr
+           #TODO: FIX THIS
+           if normerr is not None and errfactors is not None:
+               for i in ntorder:
+                   mask = (self.sequence == i)
+                   normerr[mask] += (errfactors[i]/normfactors[i])**2
+                   normerr[mask] = np.abs( normprof[mask] ) * np.sqrt( normerr[mask] )
+               
+               self.normerror = normerr
 
  
         return normfactors
@@ -766,35 +786,74 @@ class ReactivityProfile(object):
         
 
 
-    def eDMS_normalization(self, data):
+    #Add Thomas Logic / 75th percentile logic here
+    def eDMS_normalization(self, data, N7=False, NT="", name = None):
         """normalize data following eDMS pernt scheme in ShapeMapper 2.2"""    
-    
+        
         # if too few data points, don't normalize
-        if len(data)<10:
+        if len(data)<10 and N7 and NT == "N":
+            return np.nan, np.nan, np.nan
+        elif len(data) < 10:
             return np.nan, np.nan
-
-        bnds = np.percentile(data, [90., 95.])
-        mask = (data >= bnds[0]) & (data<bnds[1])
-        normset = data[mask]
         
-        # compute the norm the standard way
-        n1 = np.mean(normset)
+        if not N7:
+           bnds = np.percentile(data, [90., 95.])
+           mask = (data >= bnds[0]) & (data<bnds[1])
+           normset = data[mask]
+           
+           # compute the norm the standard way
+           n1 = np.mean(normset)
 
-        try:
-            # compute the norm only considering reactive nts
-            n2 = np.percentile(data[data>0.001], 75.)
-        except IndexError:
-            n2 = 0
+           try:
+               # compute the norm only considering reactive nts
+               n2 = np.percentile(data[data>0.001], 75.)
+           except IndexError:
+               n2 = 0
 
-        nfac = max(n1,n2)
-        
+           nfac = max(n1,n2)
+           std = np.std(normset)
+
+        else:
+            nfac = np.percentile(data, 75)
+            profile = self.profile(name)
+            sequence = self.sequence
+
+            if NT == 'N':
+                
+                g_pur = []
+                g_pyr = []
+                for v, i in enumerate(profile):
+                    if np.isfinite(i) and sequence[v] == 'N':
+                        if v + 1 < len(profile):
+                            if sequence[v+1] == 'N' or sequence[v + 1] == 'A':
+                                g_pur.append(i)
+                            elif sequence[v + 1] == 'C' or sequence[v + 1] == 'U':
+                                g_pyr.append(i)
+
+                #Thomas Normalization update 9 June 2023:
+                if len(g_pyr) < 15 or len(g_pur) < 15:
+                    #Apply heuristic so g_pyr and g_pur can be pooled for more statistical power in shorter RNAs
+                    g_pyr = [x * 0.65 for x in g_pyr] #Heuristic based on Thomas' analysis of Data
+                    g_pur = g_pyr + g_pur
+                    g_pyr = g_pur
+                    pur_pyr_dict = {'g_pur': np.percentile(g_pur, 75), 'g_pyr':(np.percentile(g_pyr, 75) / .65)}
+                else:
+                    pur_pyr_dict = {'g_pur': np.percentile(g_pur, 75), 'g_pyr':np.percentile(g_pyr, 75)}
+      
+
         # if signal too low, don't norm the data
-        if nfac < 0.002:
+        if nfac < 0.02 and NT == "N":
+            return np.nan, np.nan, np.nan
+        elif nfac < 0.002:
             return np.nan, np.nan
         
-        std = np.std(normset)
-    
-        return nfac, std/np.sqrt(len(normset))
+
+
+
+        if N7 and NT == 'N':
+            return nfac, pur_pyr_dict, 0
+        else:
+            return nfac, std/np.sqrt(len(normset))
 
 
 

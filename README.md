@@ -22,6 +22,8 @@ Can plot the following types of data
 -Rings
     --ringz (plot z-scores)
     --ringsig (plot correlation Chi2 significance)
+    --ringalpha (plot alpha scores)
+    --catring (plot N1/3-N1/3, N1/3-N7, and N7-N7 scores from a RingFile generated with --concat)
 
 -PAIR-MaP
     --pairmap (plot PAIR-MaP base pairs)
@@ -29,6 +31,9 @@ Can plot the following types of data
 -Reactivity profiles
     --profile (plot normalized SHAPE reactivity data)
     --dmsprofile (plot normalized reactivity data colored to slightly different scale)
+    --N7profile  (plots normalized N7G reactivity data from profile file (profile.txtga))
+    *Note* If multiple files are submitted for any of these profile flags - an average
+    reactivity and corresponding standard error will be calculated and plotted for each nucleotide.
 
 
 # StructureObjects
