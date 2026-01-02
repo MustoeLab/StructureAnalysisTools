@@ -24,7 +24,8 @@ matplotlib.rcParams['xtick.direction'] = 'out'
 matplotlib.rcParams['xtick.minor.size'] = 4 
 matplotlib.rcParams['xtick.minor.width'] = 1
 matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['font.sans-serif'] = 'Arial'
+# List of fonts to search for to avoid annoying font not found warning
+matplotlib.rcParams['font.sans-serif'] = ["Arial", "DejaVu Sans", "Liberation Sans"]
 import matplotlib.pyplot as plot
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
@@ -33,11 +34,6 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 from ReactivityProfile import ReactivityProfile
 from mean_reactivity_stdev import average_profile, calc_stdev
-
-#import warnings
-
-#warnings.filterwarnings("ignore")
-
 
 class ArcLegend(object):
     """Container for Legend for arc plot"""
@@ -1138,7 +1134,7 @@ class ArcPlot(object):
 
 
 
-    def readProfile(self, profilefile, dms=False):
+    def readProfile(self, profilefile, bg = 0.02, dms=False):
 
         if isinstance(profilefile, ReactivityProfile):
             self.reactprofile = profilefile.normprofile
@@ -1157,7 +1153,7 @@ class ArcPlot(object):
             if ftype==1:
                 self.readSHAPE(profilefile)
             else:
-                profile = ReactivityProfile(profilefile)
+                profile = ReactivityProfile(profilefile, bg = bg)
                 self.reactprofile = profile.normprofile
                 
                 if self.seq == '' or self.seq.count(' ') == len(self.seq):
@@ -1172,12 +1168,12 @@ class ArcPlot(object):
             self.height[1] = max(20, min(40, len(self.reactprofile)/12.5))
 
 
-    def readN7Profile(self, N7File, panel=-1):
+    def readN7Profile(self, N7File, bg = 0.02, panel=-1):
 
         if isinstance(N7File, ReactivityProfile):
             profile = N7File   
         else:
-            profile = ReactivityProfile(N7File)
+            profile = ReactivityProfile(N7File, bg = bg)
 
         react = profile.normprofile
 
@@ -1535,6 +1531,8 @@ def parseArgs():
     prs.add_argument("--dmsprofile", type=str, nargs = "+", help='Normalize and plot DMS reactivity from profile file. If more than one profile is submitted via this flag, will plot mean normalized reactivity as well as stdev per nucleotide.')
     prs.add_argument("--N7profile",type=str, nargs = "+", help='Plots N7 reactivity from profile file. Note, you must specify a profile file with --profile or --dmsprofile in order for this command to work. If more than one profile is submitted via this flag, will plot mean normalized reactivity as well as stdev per nucleotide.')
     prs.add_argument("--bar_height", type=float, default=1.0, help="Scales N13 profile bar heights to a float in the range 0.0 < bar_height <= 1.00 so height *= bar_height. (eg if bar_height = .66 then the height will be scaled to 66 percent of the default value.) ")
+    prs.add_argument("--max_bg_N7", type = float, default = 0.02, help = "Maximum allowable untreated rate before the normalized reactivity is set to NaN. (Default: .02)")
+    prs.add_argument("--max_bg", type = float, default = 0.02, help = "Maximum allowable untreated rate before the normalized reactivity is set to NaN. (Default: .02)")
 
     prs.add_argument("--bottom", action='store_true', help="Plot arcs on the bottom")
 
@@ -1773,27 +1771,27 @@ if __name__=="__main__":
         if len(args.profile) > 1:
             avg_profile = average_profile(args.profile)
             nt_stdev = calc_stdev(args.profile)
-            aplot.readProfile(avg_profile)
+            aplot.readProfile(avg_profile, bg = args.max_bg)
             aplot.add_error_bars(nt_stdev) 
         elif len(args.profile) == 1:
-            aplot.readProfile(args.profile[0])
+            aplot.readProfile(args.profile[0], bg = args.max_bg)
     if args.N7profile:
         if len(args.N7profile) > 1:
             avg_profile = average_profile(args.N7profile)
             nt_stdev = calc_stdev(args.N7profile)
-            aplot.readN7Profile(avg_profile)
+            aplot.readN7Profile(avg_profile, bg = args.max_bg_N7)
             aplot.add_error_bars(nt_stdev, lower = True) 
         elif len(args.N7profile) == 1:
-            aplot.readN7Profile(args.N7profile[0])
+            aplot.readN7Profile(args.N7profile[0], bg = args.max_bg_N7)
     if args.dmsprofile:
         if len(args.dmsprofile) > 1:
             avg_profile = average_profile(args.dmsprofile)
             nt_stdev = calc_stdev(args.dmsprofile)
-            aplot.readProfile(avg_profile, dms = True)
+            aplot.readProfile(avg_profile, dms = True, bg = args.max_bg)
             #print("Finding std dev: ", nt_stdev)
             aplot.add_error_bars(nt_stdev) 
         elif len(args.dmsprofile) == 1:
-            aplot.readProfile(args.dmsprofile[0], dms=True)
+            aplot.readProfile(args.dmsprofile[0], dms=True, bg = args.max_bg)
 
     if args.catring:
         aplot.addCatRings(args.catring, filterneg=args.filternegcorrs, metric='alpha', N7=True, N17=True, contactfilter=(args.contactfilter, CT1))

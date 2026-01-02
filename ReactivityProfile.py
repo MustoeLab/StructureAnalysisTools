@@ -482,7 +482,7 @@ class ReactivityProfile(object):
                               
 
 
-    def normalize(self, eDMS=False, oldDMS=False, byNT=False, name=None, normfactors = None, errfactors = None, N7 = False, **kwargs):
+    def normalize(self, eDMS=False, oldDMS=False, byNT=False, name=None, normfactors = None, errfactors = None, N7 = False, verbal = True, **kwargs):
         """normalize the profile; overwrites values in normprofile
         By default, normalization is done in a sequence agnostic way (SHAPE default)
         If byNT, nts are normalized independently
@@ -579,14 +579,15 @@ class ReactivityProfile(object):
 
            self.normprofile = normprof
            
-           if eDMS:
-               print("Renormalized data using eDMS mode")
-           elif oldDMS:
-               print("Renormalized data using oldDMS mode")
-           elif byNT:
-               print("Renormalized data using byNT mode")
-           else:
-               print("Renormalized data using standard mode")
+           if verbal:
+               if eDMS:
+                   print("Renormalized data using eDMS mode")
+               elif oldDMS:
+                   print("Renormalized data using oldDMS mode")
+               elif byNT:
+                   print("Renormalized data using byNT mode")
+               else:
+                   print("Renormalized data using standard mode")
 
 
            #TODO: FIX THIS

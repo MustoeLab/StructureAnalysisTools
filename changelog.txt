@@ -1,3 +1,21 @@
+Version 1.0.2 - 18 August 2025
+-------------
+- ArcPlot.py - Font fallbacks specified to avoid annoying findFont warning.
+- ArcPlot.py - Removed renormalization - plot profile reactivities as is
+is.
+- ArcPlot.py - Added in ability to pass --max_bg_N7 and --max_bg to set
+maximum allowable rate before NT is set to NaN.
+- correlation_code.py - Removed renormalization - plot profile reactivities as
+- correlation_code.py - Removed --GA flag and replaced with --N7_profile(1/2)
+flags enabling user to plot N7_G information in the same plot as N1/3
+information if desired. 
+- correlation_code.py - Removed --profile argument relating to skyline
+plotting since it was never implemented.
+- correlation_code.py - Added automatic pdf formatting to output file. If the
+user does not add a .pdf suffix to the output file - one will be added.
+--ReactivityProfile.py - added in a verbal parameter for the normalize()
+function.
+
 Version 1.0.1
 -----------
 - ReactivityProfiles.py eDMS_normalization() tweaked so g_pur and g_pyr are
