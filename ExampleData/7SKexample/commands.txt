@@ -1,0 +1,4 @@
+python ~/Dropbox/Code/arcPlot/arcPlot.py --dms 7SK-incell-0.dms --pair 7SK-incell-0-pairmap.txt --ringsig 7SK-incell-0-rings.txt --ct 7SK-incell-0.ct --fasta 7SK.fa --contactfilter 15 --filterneg filtered-0.pdf 
+
+python ~/Dropbox/Code/arcPlot/arcPlot.py --dms 7SK-incell-0.dms --pair 7SK-incell-0-pairmap.txt --ringsig 7SK-incell-0-rings.txt --fasta 7SK.fa alldata-0.pdf 
+
