@@ -1046,7 +1046,7 @@ def readSHAPE(fIN):
     shape = []
     seq = ''
     
-    with open(fIN, "rU") as inp:
+    with open(fIN, "r") as inp:
 
         for line in inp:
             spl = line.split()
@@ -1082,7 +1082,7 @@ def readSeq(fIN, type='RNAstructure'):
     
     # strip the input file of comments
     seqRaw = []
-    for i in open(fIN, "rU").read().split():
+    for i in open(fIN, "r").read().split():
         if len(i) == 0: continue
         if i[0] == ";": continue
         seqRaw.append(i)

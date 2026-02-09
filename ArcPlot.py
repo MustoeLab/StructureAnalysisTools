@@ -1481,7 +1481,7 @@ class ANNO():
 
         df = df.sort_values(by = ['info', 'tstart'])
         df = df.groupby('info').apply(lambda g: merge_peak(g))
-        df = df.groupby(['info', 'diff']).agg({'tstart': 'min', 'tend': 'max'}).reset_index()
+        df = df.groupby([pd.Grouper(key='info'), 'diff']).agg({'tstart': 'min', 'tend': 'max'}).reset_index()
         df = df.sort_values(by = 'info')
         df['label'], df['group'] = zip(*df['info'].apply(lambda g: split_info(g)))
 
