@@ -1,0 +1,4 @@
+332	Window=3	Metric=PAIRMAPPER	
+i	j	Sig.	Class	Zij	Zi	Zj	Mod_Depth	Mod_Comuts	Unt_Depth	Unt_Comuts
+29	80	33.32	2	4.49	4.56	4.41	21192	178	3259826	122
+27	64	36.00	0	3.29	1.92	4.65	20783	322	3206954	118
